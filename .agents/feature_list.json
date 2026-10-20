@@ -1,0 +1,45 @@
+{
+  "project": "Ticket-Engine",
+  "description": "Backlog inicial del Motor de Emisión y Firma Digital de Boletos del Módulo 4.",
+  "rules": {
+    "one_feature_at_a_time": true,
+    "require_verification_to_close": true,
+    "require_module_boundary": true,
+    "require_user_or_agent_summary": true,
+    "valid_status": [
+      "pending",
+      "in_progress",
+      "done",
+      "blocked"
+    ]
+  },
+  "features": [
+    {
+      "id": 1,
+      "name": "ticket_crypto_service",
+      "module": "crypto",
+      "title": "Implementar hash SHA-256 y firma ECDSA del boleto",
+      "description": "Crear el servicio criptográfico que reciba un payload canónico, calcule su hash SHA-256, lo firme con ECDSA usando secp256r1 y permita verificar la firma con la llave pública.",
+      "allowed_paths": [
+        "src/main/java/com/ticketengine/crypto/",
+        "src/test/kotlin/com/ticketengine/crypto/",
+        "docs/crypto-specification.md"
+      ],
+      "forbidden_paths": [
+        "src/main/java/com/ticketengine/api/",
+        "src/main/kotlin/com/ticketengine/persistence/",
+        "frontend/"
+      ],
+      "deliverables": [
+        "Firma ECDSA con curva secp256r1",
+        "Verificación estricta ante payload o firma modificados",
+        "Protección de la llave privada y exposición controlada de la llave pública",
+        "Pruebas unitarias del hash, firma y verificación"
+      ],
+      "verification": [
+        "./gradlew test"
+      ],
+      "status": "pending"
+    }
+  ]
+}
