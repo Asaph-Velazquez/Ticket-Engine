@@ -4,25 +4,77 @@ Microservicio emisor de boletos inmutables con JWS ES256, Java/Kotlin y PostgreS
 exclusivo. Java contiene criptografía, controladores y validación HTTP; Kotlin
 contiene negocio, DTOs y persistencia.
 
-## Puesta en marcha
+## Puesta en marcha rápida
 
 Solo se requiere Docker Desktop con contenedores Linux y Docker Compose.
 No instalar Java, Kotlin, Gradle, Node ni dependencias de lenguaje en el host.
 
+Desde PowerShell:
+
+```powershell
+cd C:\Users\samur\Downloads\Ticket-Engine
+.\run.ps1
+```
+
+`run.ps1` inicializa los secretos y las llaves de desarrollo, construye las
+imágenes y espera a que PostgreSQL, las migraciones, el backend y el panel estén
+saludables. No imprime ningún secreto.
+
+Opciones útiles:
+
+```powershell
+.\run.ps1 -NoBuild   # reutiliza las imágenes existentes
+.\run.ps1 -Logs      # levanta el servicio y sigue los logs de app/web
+.\run.ps1 -Down      # detiene los contenedores sin borrar volúmenes
+```
+
+Si se desea ejecutar los comandos manualmente, el equivalente es:
+
 ```powershell
 docker compose --profile tools run --build --rm secrets-init
 docker compose config --quiet
-docker compose --profile tools run --rm tests
-docker compose --profile tools run --build --rm frontend-tests
 docker compose up --build -d --wait
-docker compose --profile tools run --build --rm browser-tests
-docker compose exec -T app curl --fail --silent http://localhost:8080/actuator/health
 ```
 
 Panel React: `http://localhost:8085`. API: `http://localhost:8084`. El puerto 8080
 queda dentro de Docker. Abrir localmente `.secrets/admin-token` y pegar su valor
 en el acceso administrativo del panel. La clave se mantiene solo en memoria del
 navegador; no se incluye en JavaScript, Git, cookies ni almacenamiento persistente.
+
+### Primer acceso y emisión de prueba
+
+1. Abrir `.secrets/admin-token` con un editor local; el archivo se crea
+   automáticamente y su valor no debe compartirse ni subirse a Git.
+2. Abrir `http://localhost:8085` y pegar el token en el formulario de acceso.
+3. Usar la emisión sandbox para crear un boleto de prueba.
+4. Inspeccionar el JWS, verificar la firma y descargar el HTML con QR.
+
+La llave ECDSA de desarrollo se conserva en el volumen Docker
+`ticket-engine_signing_keys`. No se necesita proporcionar una llave manualmente.
+No ejecutar `docker compose down -v` si se deben conservar los boletos o sus
+firmas; ese comando elimina la base de datos, secretos y llaves de desarrollo.
+
+Para regenerar deliberadamente un entorno limpio:
+
+```powershell
+docker compose down -v
+Remove-Item -Recurse -Force .secrets
+.\run.ps1
+```
+
+### Ejecutar la suite de pruebas
+
+Todas las herramientas y dependencias se ejecutan dentro de contenedores:
+
+```powershell
+docker compose --profile tools run --build --rm tests
+docker compose --profile tools run --build --rm frontend-tests
+docker compose --profile tools build browser-tests
+docker compose --profile tools run --no-deps --rm browser-tests
+```
+
+Las pruebas no usan la base de datos de desarrollo: crean una base PostgreSQL
+aislada y llaves de prueba separadas.
 
 Desde el panel se puede emitir un boleto sandbox, consultar los boletos guardados,
 inspeccionar el JWS y verificarlo con la llave pública. El boleto se puede imprimir
