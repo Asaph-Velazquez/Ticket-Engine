@@ -1,0 +1,240 @@
+name: ticket-engine
+
+services:
+  secrets-init:
+    image: ticket-engine-bootstrap:dev
+    build:
+      context: .
+      dockerfile: docker/bootstrap.Dockerfile
+    profiles: [tools]
+    network_mode: none
+    volumes:
+      - ./.secrets:/secrets
+      - signing_keys:/keys
+      - test_signing_keys:/test-keys
+
+  db:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_DB: ticket_engine
+      POSTGRES_USER: ticket_engine
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets:
+      - source: postgres_password
+        target: postgres-password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U ticket_engine -d ticket_engine"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  migrate:
+    image: postgres:17.6-alpine
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGDATABASE: ticket_engine
+      PGUSER: ticket_engine
+    secrets:
+      - source: postgres_password
+        target: postgres-password
+      - source: application_password
+        target: application-password
+    volumes:
+      - ./DB:/migration:ro
+    networks: [database]
+    entrypoint: ["/bin/sh", "/migration/migrate.sh"]
+
+  app:
+    image: ticket-engine:dev
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      # Únicamente el entorno sandbox local permite emisiones administrativas.
+      TICKET_DEMO_ENABLED: ${TICKET_DEMO_ENABLED:-true}
+    secrets:
+      - source: application_password
+        target: spring.datasource.password
+      - source: admin_token
+        target: ticket.admin-token
+      - source: payment_hmac_secret
+        target: ticket.webhook-secret
+    volumes:
+      - signing_keys:/run/keys:ro
+    ports:
+      - "127.0.0.1:${TICKET_ENGINE_PORT:-8084}:8080"
+    networks:
+      database: {}
+      integration:
+        aliases: [ticket-engine-api, ticket-engine]
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://localhost:8080/actuator/health]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
+  test-db:
+    image: postgres:17.6-alpine
+    profiles: [tools]
+    environment:
+      POSTGRES_DB: ticket_engine_test
+      POSTGRES_USER: ticket_engine
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets:
+      - source: postgres_password
+        target: postgres-password
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks: [test-database]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U ticket_engine -d ticket_engine_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  web:
+    image: ticket-engine-web:dev
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: runtime
+    depends_on:
+      app:
+        condition: service_healthy
+    user: "101:101"
+    ports:
+      - "127.0.0.1:${TICKET_ENGINE_WEB_PORT:-8085}:8080"
+    networks: [integration]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, wget, --quiet, --spider, http://127.0.0.1:8080/health]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  frontend-tests:
+    image: ticket-engine-frontend-tests:dev
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: test
+    profiles: [tools]
+    network_mode: none
+    command: [npm, run, test]
+
+  browser-tests:
+    image: ticket-engine-browser-tests:dev
+    build:
+      context: ./docker/e2e
+      dockerfile: Dockerfile
+    profiles: [tools]
+    depends_on:
+      app:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    environment:
+      BASE_URL: http://localhost:8080
+      QA_OUTPUT_DIR: /results
+    secrets:
+      - source: admin_token
+        target: admin-token
+    volumes:
+      - ./artifacts/qa:/results
+    network_mode: service:web
+    shm_size: 1gb
+
+  test-migrate:
+    image: postgres:17.6-alpine
+    profiles: [tools]
+    depends_on:
+      test-db:
+        condition: service_healthy
+    environment:
+      PGHOST: test-db
+      PGDATABASE: ticket_engine_test
+      PGUSER: ticket_engine
+    secrets:
+      - source: postgres_password
+        target: postgres-password
+      - source: application_password
+        target: application-password
+    volumes:
+      - ./DB:/migration:ro
+    networks: [test-database]
+    entrypoint: ["/bin/sh", "/migration/migrate.sh"]
+
+  tests:
+    image: gradle:8.14.3-jdk21
+    profiles: [tools]
+    working_dir: /workspace
+    environment:
+      TICKET_ENGINE_BUILD_DIR: /output/build
+      SPRING_DATASOURCE_URL: jdbc:postgresql://test-db:5432/ticket_engine_test
+      TICKET_DEMO_ENABLED: "true"
+    depends_on:
+      test-migrate:
+        condition: service_completed_successfully
+    secrets:
+      - source: application_password
+        target: spring.datasource.password
+      - source: admin_token
+        target: ticket.admin-token
+      - source: payment_hmac_secret
+        target: ticket.webhook-secret
+      - source: postgres_password
+        target: test.bootstrap.password
+    volumes:
+      - .:/workspace:ro
+      - test_build:/output
+      - gradle_cache:/home/gradle/.gradle
+      - test_signing_keys:/run/keys:ro
+    networks: [test-database, integration]
+    command: [gradle, --no-daemon, --project-cache-dir, /tmp/gradle-project, clean, build]
+
+secrets:
+  postgres_password:
+    file: ./.secrets/postgres-password
+  application_password:
+    file: ./.secrets/application-password
+  admin_token:
+    file: ./.secrets/admin-token
+  payment_hmac_secret:
+    file: ./.secrets/payment-hmac-secret
+
+volumes:
+  postgres_data:
+  signing_keys:
+  test_signing_keys:
+  test_build:
+  gradle_cache:
+
+networks:
+  database:
+    internal: true
+  test-database:
+    internal: true
+  integration:
+    name: ${TICKET_ENGINE_NETWORK:-ticket-engine-integration}

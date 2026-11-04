@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: ticket-engine
+  config:
+    import: "configtree:/run/secrets/"
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://db:5432/ticket_engine}
+    username: ticket_engine_app
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 10000
+server:
+  port: 8080
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+ticket:
+  issuer: ticket-engine
+  audience: ticket-wallet-access
+  private-key: /run/keys/private.pem
+  public-key: /run/keys/public.pem
+  demo-enabled: ${TICKET_DEMO_ENABLED:false}

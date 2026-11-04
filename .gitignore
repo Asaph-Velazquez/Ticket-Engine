@@ -1,0 +1,17 @@
+.secrets/
+.env
+.env.*
+!.env.example
+.gradle/
+.kotlin/
+build/
+**/build/
+node_modules/
+frontend/dist/
+*.log
+.idea/
+*.iml
+artifacts/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/

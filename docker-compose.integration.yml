@@ -1,0 +1,5 @@
+# El orquestador global debe crear esta red antes del despliegue integrado.
+networks:
+  integration:
+    external: true
+    name: ${TICKET_ENGINE_NETWORK:-sistema-boletos}

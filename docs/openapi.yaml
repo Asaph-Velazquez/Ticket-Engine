@@ -1,0 +1,449 @@
+openapi: 3.0.3
+info:
+  title: Ticket Engine — Módulo 4
+  version: 1.0.0
+  description: >-
+    Emisión inmutable de un boleto por pago confirmado. ES256/P-256, idempotencia
+    por paymentId y exclusión por eventId+seatId. Solo comunicación HTTP entre
+    módulos. OpenAPI también disponible en /openapi.yaml. La verificación no
+    consume el boleto ni sustituye el control de acceso del Módulo 6.
+servers:
+  - url: http://localhost:8084
+    description: Backend Docker local
+tags:
+  - name: Emisión
+  - name: Administración
+  - name: Verificación
+paths:
+  /webhooks/payments/confirmed:
+    post:
+      tags: [Emisión]
+      operationId: confirmPayment
+      summary: Emitir a partir de una confirmación autenticada del Módulo 3
+      description: >-
+        HMAC-SHA256 sobre UTF8(timestamp + '.') concatenado con los bytes JSON
+        exactos. El secreto se usa como texto UTF-8, no se decodifica como base64.
+        Timestamp epoch en segundos dentro de ±300 segundos. Autenticación antes
+        de parsear JSON. Máximo 32768 bytes incluso con Transfer-Encoding chunked.
+        Reintentar con el mismo paymentId y campos normalizados recupera el JWS
+        original, incluso tras vencer. Datos diferentes para ese pago generan409.
+      security:
+        - paymentSignature: []
+          paymentTimestamp: []
+      requestBody:
+        $ref: '#/components/requestBodies/Payment'
+      responses:
+        '201':
+          $ref: '#/components/responses/Created'
+        '200':
+          $ref: '#/components/responses/Replayed'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/tickets:
+    post:
+      tags: [Emisión]
+      operationId: emitTicket
+      summary: Alias REST del webhook, con la misma autenticación HMAC
+      security:
+        - paymentSignature: []
+          paymentTimestamp: []
+      requestBody:
+        $ref: '#/components/requestBodies/Payment'
+      responses:
+        '201':
+          $ref: '#/components/responses/Created'
+        '200':
+          $ref: '#/components/responses/Replayed'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        default:
+          $ref: '#/components/responses/Error'
+    get:
+      tags: [Administración]
+      operationId: listTickets
+      summary: Listar boletos emitidos, del más reciente al más antiguo
+      security:
+        - adminBearer: []
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - in: query
+          name: offset
+          schema: {type: integer, minimum: 0, default: 0}
+      responses:
+        '200':
+          description: Página de boletos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/tickets/{ticketId}:
+    get:
+      tags: [Administración]
+      operationId: getTicket
+      summary: Recuperar el boleto inmutable y su token original
+      security:
+        - adminBearer: []
+      parameters:
+        - in: path
+          name: ticketId
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Boleto emitido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: TICKET_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/demo/tickets:
+    post:
+      tags: [Administración]
+      operationId: createDemoTicket
+      summary: Emitir un boleto sandbox desde el panel interno
+      description: >-
+        Exclusivo para demostraciones. Exige Bearer administrativo y la propiedad
+        ticket.demo-enabled=true, deshabilitada por defecto en la aplicación.
+        No comprueba una transacción real de pago; usa la misma lógica de firma,
+        idempotencia e inmutabilidad. No habilitar en producción.
+      security:
+        - adminBearer: []
+      requestBody:
+        $ref: '#/components/requestBodies/Payment'
+      responses:
+        '201':
+          $ref: '#/components/responses/Created'
+        '200':
+          $ref: '#/components/responses/Replayed'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Sandbox deshabilitado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/system:
+    get:
+      tags: [Administración]
+      operationId: getSystem
+      summary: Consultar metadatos públicos y estado del modo sandbox
+      security:
+        - adminBearer: []
+      responses:
+        '200':
+          description: Configuración de integración, sin secretos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [issuer, audience, keyId, demoEnabled]
+                properties:
+                  issuer: {type: string, example: ticket-engine}
+                  audience: {type: string, example: ticket-wallet-access}
+                  keyId: {type: string}
+                  demoEnabled: {type: boolean}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+  /public-key:
+    get:
+      tags: [Verificación]
+      operationId: getPublicKey
+      summary: Descargar la llave pública como JWK EC P-256
+      security: []
+      responses:
+        '200':
+          description: Solo parámetros públicos, nunca la coordenada privada d
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicJwk'
+  /.well-known/jwks.json:
+    get:
+      tags: [Verificación]
+      operationId: getJwks
+      summary: Descargar JWKS para verificadores estándar
+      security: []
+      responses:
+        '200':
+          description: Conjunto de llaves públicas del emisor
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PublicJwk'
+  /verify:
+    post:
+      tags: [Verificación]
+      operationId: verifyTicket
+      summary: Verificar firma ES256 y claims sin consultar la base de datos
+      description: >-
+        Verifica firma y perfil v1, emisor, audiencia, identificadores, estado y
+        vigencia. Siempre usar HTTP200 para tokens de formato/firma/claims inválidos.
+        Requests JSON inválidos o sin token reciben400. No registra acceso de puerta.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1, maxLength: 24000}
+      responses:
+        '200':
+          description: Resultado sin payload si la firma o los claims son inválidos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid, reason]
+                properties:
+                  valid: {type: boolean}
+                  reason:
+                    type: string
+                    enum: [VALID, INVALID_SIGNATURE_OR_FORMAT, INVALID_CLAIMS_OR_VALIDITY]
+                  payload:
+                    type: object
+                    nullable: true
+                    additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        default:
+          $ref: '#/components/responses/Error'
+  /actuator/health:
+    get:
+      operationId: health
+      summary: Salud de aplicación y PostgreSQL, sin detalles internos
+      security: []
+      responses:
+        '200':
+          description: Saludable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string, example: UP}
+        '503':
+          description: Servicio no saludable
+  /openapi.yaml:
+    get:
+      operationId: openapi
+      summary: Descargar este contrato
+      security: []
+      responses:
+        '200':
+          description: Especificación OpenAPI
+          content:
+            application/yaml:
+              schema: {type: string}
+components:
+  securitySchemes:
+    adminBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Token administrativo interno montado como secreto. No es un JWT ni una credencial del comprador.
+    paymentSignature:
+      type: apiKey
+      in: header
+      name: X-Payment-Signature
+      description: Hexadecimal HMAC-SHA256, 64 caracteres, calculado sobre timestamp+'.'+rawBody.
+    paymentTimestamp:
+      type: apiKey
+      in: header
+      name: X-Payment-Timestamp
+      description: Epoch en segundos, ventana absoluta de 300 segundos.
+  requestBodies:
+    Payment:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PaymentConfirmation'
+          example:
+            paymentId: 5b0cc2a7-d6b9-4c3d-a39e-42a5477d5671
+            eventId: 97b11d5c-5d63-4787-abef-a35edfcabf93
+            buyerId: 80863fb0-da9c-40e9-874c-6c2be473ec61
+            seatId: A-12
+            eventName: Noche de concierto
+            venue: Auditorio Central
+            eventStartsAt: '2030-01-01T19:00:00Z'
+            eventEndsAt: '2030-01-01T22:00:00Z'
+            amountMinor: 125000
+            currency: MXN
+            paymentStatus: PAID
+  responses:
+    Created:
+      description: Boleto emitido, replayed=false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EmissionResult'
+    Replayed:
+      description: Boleto original recuperado, replayed=true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EmissionResult'
+    BadRequest:
+      description: INVALID_REQUEST — JSON, campos, fechas o paginación inválidos
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: UNAUTHORIZED o INVALID_PAYMENT_AUTH — autenticación ausente, inválida o fuera de ventana
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: PAYMENT_CONFLICT o SEAT_ALREADY_ISSUED
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooLarge:
+      description: BODY_TOO_LARGE — límite de 32 KiB excedido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error:
+      description: Error seguro; 415 para Content-Type inválido, 503 persistencia, 500 fallo interno
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    PaymentConfirmation:
+      type: object
+      additionalProperties: false
+      required: [paymentId, eventId, buyerId, seatId, eventName, venue, eventStartsAt, eventEndsAt, amountMinor, currency, paymentStatus]
+      properties:
+        paymentId: {type: string, format: uuid, description: UUID no nulo. Un solo boleto por paymentId.}
+        eventId: {type: string, format: uuid}
+        buyerId: {type: string, format: uuid}
+        seatId: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$', maxLength: 64}
+        eventName: {type: string, minLength: 1, maxLength: 140}
+        venue: {type: string, minLength: 1, maxLength: 140}
+        eventStartsAt:
+          type: string
+          format: date-time
+          description: Instant normalizado a segundos UTC. No se admiten fechas anteriores a1970.
+        eventEndsAt:
+          type: string
+          format: date-time
+          description: Posterior al inicio; futura y dentro de cinco años para emisiones nuevas.
+        amountMinor: {type: integer, format: int64, minimum: 0, maximum: 9999999999999}
+        currency: {type: string, pattern: '^[A-Z]{3}$', description: Código ISO4217 válido.}
+        paymentStatus: {type: string, enum: [PAID]}
+    Ticket:
+      type: object
+      required: [ticketId, paymentId, eventId, buyerId, seatId, eventName, venue, eventStartsAt, eventEndsAt, issuedAt, expiresAt, status, token, payloadHash, keyId, payloadJson]
+      properties:
+        ticketId: {type: string, format: uuid}
+        paymentId: {type: string, format: uuid}
+        eventId: {type: string, format: uuid}
+        buyerId: {type: string, format: uuid}
+        seatId: {type: string}
+        eventName: {type: string}
+        venue: {type: string}
+        eventStartsAt: {type: string, format: date-time}
+        eventEndsAt: {type: string, format: date-time}
+        issuedAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        status: {type: string, enum: [ISSUED]}
+        token: {type: string, description: JWS compacto ES256 exacto persistido.}
+        payloadHash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        keyId: {type: string, description: Thumbprint JWK SHA-256 base64url.}
+        payloadJson: {type: string, description: Payload canónico UTF-8 representado como cadena JSON.}
+    EmissionResult:
+      type: object
+      required: [ticket, replayed]
+      properties:
+        ticket:
+          $ref: '#/components/schemas/Ticket'
+        replayed: {type: boolean}
+    TicketPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ticket'
+        total: {type: integer, format: int64}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        offset: {type: integer, minimum: 0}
+    PublicJwk:
+      type: object
+      additionalProperties: false
+      required: [kty, crv, alg, use, kid, x, y, key_ops]
+      properties:
+        kty: {type: string, enum: [EC]}
+        crv: {type: string, enum: [P-256]}
+        alg: {type: string, enum: [ES256]}
+        use: {type: string, enum: [sig]}
+        kid: {type: string}
+        x: {type: string, description: Coordenada pública de 32 bytes base64url sin padding.}
+        y: {type: string, description: Coordenada pública de 32 bytes base64url sin padding.}
+        key_ops:
+          type: array
+          items: {type: string, enum: [verify]}
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: {type: string}
+        message: {type: string}

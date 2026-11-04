@@ -50,11 +50,14 @@ Pago confirmado → Validación → Payload canónico → SHA-256 → Firma ECDS
 
 ## 5. Comandos de verificación
 
-Usa el wrapper disponible en el proyecto cuando exista:
+Toda compilación, prueba y ejecución de Java, Kotlin, JavaScript y herramientas
+de lenguaje debe hacerse exclusivamente dentro de Docker. No instales JDK,
+Gradle, Kotlin, Node ni dependencias en el host. Usa el wrapper dentro del
+contenedor cuando exista; de lo contrario, usa el Gradle fijado en Compose.
 
 ```bash
-./gradlew test
-./gradlew build
+docker compose --profile tools run --rm tests
+docker compose up --build -d --wait
 ```
 
 Si el proyecto aún no tiene configuración de compilación, documenta la limitación y valida mediante las pruebas disponibles.

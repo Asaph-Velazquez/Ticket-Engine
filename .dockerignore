@@ -1,0 +1,14 @@
+.git
+.agents
+.secrets
+.env
+.env.*
+.gradle
+.kotlin
+**/build
+**/node_modules
+frontend
+DB
+docs
+*.log
+artifacts

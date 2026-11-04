@@ -1,6 +1,6 @@
 {
   "project": "Ticket-Engine",
-  "description": "Backlog inicial del Motor de Emisión y Firma Digital de Boletos del Módulo 4.",
+  "description": "Entrega completa del Módulo 4: criptografía, emisión, API, persistencia, panel React y validación integral, exclusivamente en Docker.",
   "rules": {
     "one_feature_at_a_time": true,
     "require_verification_to_close": true,
@@ -14,6 +14,99 @@
     ]
   },
   "features": [
+    {
+      "id": 3,
+      "name": "complete_emission_backend",
+      "module": "application",
+      "title": "Completar emisión, API, webhook autenticado y persistencia inmutable",
+      "owners": ["Sunem Gizeht", "Ricardo Carmona", "Christopher Dominguez", "Saul Asaph"],
+      "allowed_paths": [
+        "src/main/kotlin/", "src/main/java/com/ticketengine/api/",
+        "src/main/java/com/ticketengine/webhook/", "src/main/java/com/ticketengine/config/",
+        "src/main/resources/", "src/test/", "DB/migrations/", "DB/migrate.sh", "docker/",
+        "docker-compose.yml", "Dockerfile", "build.gradle.kts",
+        "docs/", "README.md", ".gitignore", ".dockerignore", ".gitattributes"
+      ],
+      "deliverables": [
+        "API REST Java y OpenAPI para módulos 3, 5 y 6",
+        "Servicio Kotlin con idempotencia concurrente y conflicto de asiento",
+        "PostgreSQL con rol limitado y protección contra UPDATE DELETE TRUNCATE",
+        "Webhook HMAC con ventana temporal, límites de entrada y errores seguros",
+        "Llaves persistentes y secretos generados solo dentro de Docker",
+        "Pruebas reales de firma, persistencia, autenticación y reintentos"
+      ],
+      "verification": ["docker compose --profile tools run --rm tests", "docker compose up --build -d --wait"],
+      "status": "done",
+      "verification_result": "42 pruebas backend PASSED en Docker (34s), OpenAPI validado Swagger Parser en Docker, revisión independiente APPROVED, imagen construida, migración principal exitosa y app/PostgreSQL healthy. Llaves de test y app separadas. Ver docs/backend-test-evidence.md."
+    },
+    {
+      "id": 4,
+      "name": "react_ticket_console",
+      "module": "frontend",
+      "title": "Entregar panel React con boleto HTML, QR y verificación independiente",
+      "owners": ["Jeanette Verónica", "Christopher Dominguez"],
+      "allowed_paths": ["frontend/", "docker/e2e/", "docker-compose.yml", "docker-compose.integration.yml", "docs/", "README.md", ".dockerignore", ".gitignore"],
+      "deliverables": [
+        "Panel React responsive con acceso administrativo",
+        "Emisión sandbox explícita, listado y detalle de boletos reales",
+        "Boleto imprimible y exportable a HTML con QR del JWS",
+        "Inspección de JWS y verificación con llave pública",
+        "Build Node y servicio web exclusivamente en contenedores"
+      ],
+      "verification": ["docker compose --profile tools run --rm frontend-tests", "docker compose up --build -d --wait"],
+      "status": "done",
+      "verification_result": "10 pruebas unitarias frontend PASSED y 2 recorridos reales Playwright desktop/móvil PASSED (5.8s), QR decodificado igual al JWS, HTML autónomo abierto y XSS rechazado, verificación WebCrypto nativa. Revisión independiente APPROVED. Ver docs/frontend-test-evidence.md."
+    },
+    {
+      "id": 5,
+      "name": "module_release_verification",
+      "module": "test",
+      "title": "Verificar integración completa y documentar operación del módulo",
+      "owners": ["Christopher Dominguez", "Saul Asaph"],
+      "allowed_paths": ["src/", "frontend/", "DB/migrations/", "DB/migrate.sh", "docker/", "docs/", "README.md", "docker-compose.yml", "Dockerfile", "build.gradle.kts", ".gitignore", ".dockerignore"],
+      "deliverables": [
+        "Pruebas HTTP end-to-end y verificación ES256 independiente",
+        "Pruebas de navegador y exportación del boleto HTML",
+        "Verificación de inmutabilidad, concurrencia y persistencia tras reinicio",
+        "Guía de puesta en marcha, configuración productiva y contratos de integración",
+        "Revisión independiente sin hallazgos pendientes de severidad alta o media"
+      ],
+      "verification": ["Pruebas Docker de backend, frontend y navegador", "Revisión independiente"],
+      "status": "done",
+      "verification_result": "Entrega verificada: 42 pruebas backend, 10 frontend y 2 recorridos reales desktop/móvil aprobados. Snapshot y verificación tras recrear db/migrate/app/web PASS: llave, JWS, metadatos y total preservados; replay idempotente y firma WebCrypto/servidor válidos. Revisiones independientes backend/frontend/infra APPROVED. Servicios saludables y boleto HTML real disponible en artifacts/qa/boleto-demo.html. Evidencia en docs/release-verification.md."
+    },
+    {
+      "id": 2,
+      "name": "containerized_build_foundation",
+      "module": "infrastructure",
+      "title": "Preparar compilación y ejecución Java/Kotlin exclusivamente en Docker",
+      "description": "Prerequisito de crypto: configurar Spring Boot 3, Gradle, pruebas de interoperabilidad y Compose con PostgreSQL aislado, sin herramientas de lenguaje locales.",
+      "owners": ["Christopher Dominguez", "Saul Asaph"],
+      "allowed_paths": [
+        "build.gradle.kts", "settings.gradle.kts", "gradle.properties",
+        "Dockerfile", "docker-compose.yml", ".dockerignore", ".gitignore",
+        "README.md", "docs/container-development.md",
+        "src/main/java/com/ticketengine/TicketEngineApplication.java",
+        "src/main/resources/application.yml",
+        "src/test/kotlin/com/ticketengine/ContainerFoundationTest.kt"
+      ],
+      "deliverables": [
+        "Compilación mixta Java/Kotlin y pruebas ejecutadas en Docker",
+        "Imagen de ejecución con usuario sin privilegios",
+        "PostgreSQL exclusivo del módulo, sin puerto publicado y con volumen propio",
+        "Credenciales generadas en contenedor y excluidas del repositorio",
+        "Guía de integración HTTP y red Compose global"
+      ],
+      "verification": [
+        "docker compose config --quiet",
+        "docker compose --profile tools run --rm tests",
+        "docker compose build app",
+        "docker compose up -d --wait",
+        "docker compose exec -T app curl --fail http://localhost:8080/actuator/health"
+      ],
+      "status": "done",
+      "verification_result": "BUILD SUCCESSFUL; 2 pruebas de integración aprobadas; imagen construida; app y PostgreSQL healthy; HTTP interno y puerto host 8084 UP; UID 10001, rootfs de solo lectura y CapDrop ALL; PostgreSQL no resuelve en red de integración; revisión independiente APPROVED. Evidencia en docs/container-development.md."
+    },
     {
       "id": 1,
       "name": "ticket_crypto_service",
@@ -37,9 +130,11 @@
         "Pruebas unitarias del hash, firma y verificación"
       ],
       "verification": [
-        "./gradlew test"
+        "docker compose --profile tools run --rm tests gradle --no-daemon --project-cache-dir /tmp/gradle-project test --tests '*crypto*'"
       ],
-      "status": "pending"
+      "status": "done",
+      "verification_result": "13 pruebas crypto PASSED en Docker; BUILD SUCCESSFUL; verificación ES256 independiente con JCA P1363; revisión independiente APPROVED. Ver docs/crypto-specification.md.",
+      "owners": ["Jonathan Samuel", "Christopher Dominguez"]
     }
   ]
 }
