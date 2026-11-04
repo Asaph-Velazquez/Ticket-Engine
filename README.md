@@ -12,7 +12,7 @@ No instalar Java, Kotlin, Gradle, Node ni dependencias de lenguaje en el host.
 Desde PowerShell:
 
 ```powershell
-cd C:\Users\samur\Downloads\Ticket-Engine
+# Ejecutar desde la carpeta raíz del proyecto
 .\run.ps1
 ```
 
