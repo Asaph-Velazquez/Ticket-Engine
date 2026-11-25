@@ -8,77 +8,139 @@ El contrato completo está en [openapi.yaml](openapi.yaml) y se sirve por HTTP e
 criptografía; Kotlin para DTOs, validación del negocio, emisión y JDBC. Cada
 módulo conserva su propia base; la integración es exclusivamente HTTP.
 
-## Módulo 3 → emisión
+## Módulos 3 y 2 → emisión
 
-Enviar `POST /webhooks/payments/confirmed` o su alias `POST /api/tickets` con
-`Content-Type: application/json` y los siguientes campos obligatorios:
+El boleto se emite al unir dos mensajes HTTP que comparten `reservationId`.
+Pueden llegar en cualquier orden; el segundo en llegar dispara la firma. Ambos
+quedan guardados de forma inmutable (`payment_confirmations`,
+`reservation_details`) aunque falte su contraparte.
+
+### Módulo 3: pago confirmado
+
+`POST /webhooks/payments/confirmed` (alias `POST /api/tickets`):
 
 ```json
 {
-  "paymentId": "5b0cc2a7-d6b9-4c3d-a39e-42a5477d5671",
-  "eventId": "97b11d5c-5d63-4787-abef-a35edfcabf93",
-  "buyerId": "80863fb0-da9c-40e9-874c-6c2be473ec61",
+  "event": "payment.confirmed",
+  "sourceModule": "M3_PAYMENTS",
+  "targetModule": "M4_TICKET_ISSUANCE",
+  "payload": {
+    "paymentId": "pay_01J9X8K2M4N6P8Q0R2S4T6V8W0",
+    "orderId": "ord_01J9X8J9A1B2C3D4E5F6G7H8J9",
+    "reservationId": "res_778899",
+    "buyerId": "usr_102938",
+    "amountMinor": 125000,
+    "currency": "MXN",
+    "paymentStatus": "PAID",
+    "paidAt": "2026-11-19T19:50:00Z"
+  }
+}
+```
+
+`event`, `sourceModule` y `targetModule` deben tener exactamente esos valores.
+`paidAt` no puede estar más de 300 segundos en el futuro.
+
+### Módulo 2: detalle de evento y asiento
+
+`POST /webhooks/reservations/confirmed`:
+
+```json
+{
+  "reservationId": "res_778899",
+  "eventId": "id-del-evento",
   "seatId": "A-12",
   "eventName": "Noche de concierto",
   "venue": "Auditorio Central",
   "eventStartsAt": "2030-01-01T19:00:00Z",
-  "eventEndsAt": "2030-01-01T22:00:00Z",
-  "amountMinor": 125000,
-  "currency": "MXN",
-  "paymentStatus": "PAID"
+  "eventEndsAt": "2030-01-01T22:00:00Z"
 }
 ```
 
-UUIDs deben ser no cero. Asiento: identificador seguro de hasta64 caracteres.
-Nombre y recinto: de1 a140 caracteres, sin controles. Montos: enteros en unidades
-mínimas de la moneda ISO4217, entre0 y9999999999999. El estado debe ser `PAID`.
-Fechas se normalizan a segundos UTC antes de compararlas, persistirlas y firmarlas.
-El fin debe ser posterior al inicio; para una emisión nueva debe ser futuro y no
-superar cinco años. No se aceptan campos desconocidos, duplicados, nulos en campos
-obligatorios, tipos incompatibles ni JSON sobrante.
+**`reservationId` es obligatorio**: es el campo que une este mensaje con el pago.
 
-La autenticación exige estos encabezados:
+### Reglas comunes
 
-```text
-X-Payment-Timestamp: <epoch actual en segundos>
-X-Payment-Signature: <64 caracteres hexadecimales>
-```
+Identificadores (`paymentId`, `orderId`, `reservationId`, `buyerId`, `eventId`,
+`seatId`): `^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$`. Nombre y recinto: de 1 a 140
+caracteres, sin controles. Montos: enteros en unidades mínimas de la moneda
+ISO 4217, entre 0 y 9999999999999. Fechas normalizadas a segundos UTC; el fin
+posterior al inicio y, para una reserva nueva, futuro y dentro de cinco años. No se
+aceptan campos desconocidos, duplicados, nulos, tipos incompatibles ni JSON sobrante.
+
+Cada módulo firma con **su propio secreto** HMAC:
+
+| Módulo | Encabezados | Secreto |
+|---|---|---|
+| M3 | `X-Payment-Timestamp`, `X-Payment-Signature` | `.secrets/payment-hmac-secret` |
+| M2 | `X-Reservation-Timestamp`, `X-Reservation-Signature` | `.secrets/reservation-hmac-secret` |
 
 ```text
 signature = hex(HMAC-SHA256(
-  UTF8(ticket.webhook-secret),
-  UTF8(X-Payment-Timestamp + ".") || bytes_exactos_del_body
+  UTF8(secreto),
+  UTF8(timestamp + ".") || bytes_exactos_del_body
 ))
 ```
 
-El secreto se comparte con el Módulo3 por el gestor de secretos; es texto UTF-8,
-no se decodifica como base64. No mandarlo en el body ni publicarlo al navegador.
-El timestamp tiene una ventana absoluta de300 segundos. Cualquier cambio de
-espacios, saltos de línea o bytes del body requiere recalcular el HMAC. Se
-verifica antes de deserializar. No usar el secreto administrativo como HMAC.
+El secreto es texto UTF-8, no base64; se comparte por el gestor de secretos y
+nunca va en el body. Ventana absoluta de 300 segundos. Se verifica antes de
+deserializar; cualquier cambio de bytes requiere recalcular la firma.
 
-Respuestas:
+Respuestas (iguales para ambos endpoints, cuerpo `{status, reservationId, ticket, replayed}`):
 
-- `201 {ticket, replayed:false}`: nueva emisión confirmada y persistida.
-- `200 {ticket, replayed:true}`: mismo pago y contenido normalizado; se devuelve el
-  mismo UUID y JWS exacto, incluso si el evento ya venció.
+- `201 status=ISSUED, replayed=false`: este mensaje completó el par y emitió el boleto.
+- `200 status=ISSUED, replayed=true`: mensaje repetido; mismo UUID y JWS exacto.
+- `202 status=PENDING_RESERVATION` (M3) o `PENDING_PAYMENT` (M2), `ticket=null`:
+  guardado; falta el mensaje del otro módulo.
 - `409 PAYMENT_CONFLICT`: el pago ya existe con otro contenido.
-- `409 SEAT_ALREADY_ISSUED`: otro pago ya emitió el mismo asiento para ese evento.
-- `401 INVALID_PAYMENT_AUTH`: firma/timestamp ausentes, inválidos o vencidos.
+- `409 RESERVATION_CONFLICT`: la reserva ya existe con otro contenido.
+- `409 RESERVATION_ALREADY_PAID`: otro `paymentId` ya pagó esa reserva.
+- `409 SEAT_ALREADY_ISSUED`: otro pago ya emitió ese asiento del evento.
+- `401 INVALID_PAYMENT_AUTH` / `INVALID_RESERVATION_AUTH`: firma o timestamp inválidos.
 - `400 INVALID_REQUEST`: JSON o negocio inválidos.
-- `413 BODY_TOO_LARGE`: body supera32KiB, incluso por transferencia chunked.
+- `413 BODY_TOO_LARGE`: body mayor a 32 KiB, incluso chunked.
 
-La ventana temporal reduce replays de red; la restricción única `payment_id` y la
-huella SHA-256 del request normalizado garantizan idempotencia tras reinicios y
-con reintentos concurrentes. Se usa `INSERT ... ON CONFLICT(payment_id) DO NOTHING`
-y lectura posterior bajo `READ_COMMITTED`, sin bloqueos distribuidos en memoria.
-La restricción `(event_id, seat_id)` resuelve carreras de asignación de asiento.
-La respuesta HTTP se envía después de confirmar la transacción de persistencia.
+Si la emisión falla (por ejemplo, asiento ya emitido) se revierte también el
+mensaje recibido, para que el módulo emisor pueda corregir y reenviar.
 
-Esta versión emite **un boleto por paymentId**. Un pago de múltiples asientos
-requiere acordar otro contrato con el Módulo3; no reutilizar el mismo pago con
-distintos asientos. Este servicio confía en la confirmación autenticada del
-Módulo3; no consulta una base ajena ni implementa la pasarela bancaria.
+Los mensajes de la misma reserva se serializan con
+`pg_advisory_xact_lock(reservationId)`, de modo que si M2 y M3 llegan al mismo
+tiempo uno ve al otro y se emite exactamente un boleto. La idempotencia se basa en
+la huella SHA-256 de cada mensaje normalizado, `payment_id` único,
+`reservation_id` único y `(event_id, seat_id)` único. La respuesta HTTP se envía
+después de confirmar la transacción.
+
+Se emite **un boleto por `paymentId` / `reservationId`**. Este servicio confía en
+los mensajes autenticados; no consulta bases ajenas ni la pasarela bancaria.
+
+## Módulo 5 → Wallet
+
+`GET /api/wallet/{buyerId}/tickets` con `Authorization: Bearer <ticket.wallet-token>`
+(`.secrets/wallet-token`, distinto del token administrativo; ninguno abre las rutas
+del otro). Devuelve hasta 200 boletos ordenados por fecha del evento:
+
+```json
+{
+  "tickets": [
+    {
+      "ticketId": "3f6c1d2e-...",
+      "event": "Noche de concierto",
+      "date": "01/01/2030",
+      "seat": "A-12",
+      "titular": "usr_102938",
+      "status": "ACTIVO",
+      "signatureECDSA": "<JWS ES256 completo>"
+    }
+  ],
+  "publicKeyJwk": { "kty": "EC", "crv": "P-256", "x": "...", "y": "..." }
+}
+```
+
+- `date`: fecha de inicio en `America/Mexico_City` (`ticket.wallet-time-zone`), `dd/MM/yyyy`.
+- `titular`: `buyerId` del Módulo 3; el nombre se resuelve con el Módulo 1.
+- `status`: `ACTIVO` mientras no termine el evento; `VENCIDO` después.
+- `signatureECDSA`: el JWS compacto completo (`header.payload.firma`). La Wallet
+  verifica `SHA256withECDSA` en formato P1363 sobre `header.payload` con `publicKeyJwk`.
+- `skSession` no se entrega: la clave de sesión del QR dinámico es del Módulo 5.
 
 ## Módulos 5 y 6 → llave pública y verificación
 
@@ -90,13 +152,17 @@ El JWT tiene `alg=ES256`, `typ=JWT`, `kid` fijado al emisor. Perfil de claims:
 
 ```text
 iss=ticket-engine                aud=ticket-wallet-access
-sub=buyerId                      jti=ticketId
+sub=buyerId                      jti=ticketId (UUID)
 iat=issuedAt epoch seconds       nbf=issuedAt epoch seconds
-exp=eventEndsAt epoch seconds    schemaVersion=1
-status=ISSUED                    paymentId, eventId, seatId
+exp=eventEndsAt epoch seconds    schemaVersion=2
+status=ISSUED                    paymentId, orderId, reservationId
+eventId, seatId
 eventName, venue                 eventStartsAt epoch seconds
 amountMinor, currency
 ```
+
+Los boletos v1 (previos a la integración, sin orderId/reservationId y con UUID)
+siguen verificando.
 
 `POST /verify` con `{ "token": "<JWS>" }` comprueba firma, encabezados, perfil,
 emisor, audiencia, UUIDs, campos, estado y vigencia; no necesita consultar PostgreSQL.
@@ -124,7 +190,8 @@ es opaco, de al menos32 bytes, se compara mediante digest de tamaño fijo y no e
 un JWT del comprador. Estas rutas son internas; una integración de usuarios debe
 validar autorización y propiedad mediante el Módulo1 antes de entregar boletos.
 
-`POST /api/demo/tickets` usa el mismo DTO, exige Bearer y `ticket.demo-enabled=true`.
+`POST /api/demo/tickets` recibe un DTO plano con todos los campos (orderId y
+reservationId opcionales, derivados del paymentId si faltan), exige Bearer y `ticket.demo-enabled=true`.
 Es una simulación administrativa de pago confirmado para el panel React. El valor
 por defecto en la aplicación es `false`; producción debe mantenerlo deshabilitado.
 Este endpoint no valida una transacción de dinero real.

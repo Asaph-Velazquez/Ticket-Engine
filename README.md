@@ -90,8 +90,10 @@ Después de ejecutar esas pruebas, el ejemplo listo para abrir está en
 
 | Método y ruta | Acceso | Uso |
 |---|---|---|
-| `POST /webhooks/payments/confirmed` | HMAC y timestamp | Confirmación del Módulo 3 |
-| `POST /api/tickets` | HMAC y timestamp | Emisión REST equivalente |
+| `POST /webhooks/payments/confirmed` | HMAC de pagos | Pago confirmado del Módulo 3 |
+| `POST /webhooks/reservations/confirmed` | HMAC de reservas | Evento y asiento del Módulo 2 |
+| `POST /api/tickets` | HMAC de pagos | Alias del webhook del Módulo 3 |
+| `GET /api/wallet/{buyerId}/tickets` | Bearer de la Wallet | Boletos en el formato del Módulo 5 |
 | `POST /api/demo/tickets` | Bearer administrativo y sandbox habilitado | Demostración interna |
 | `GET /api/tickets` | Bearer administrativo | Listado paginado |
 | `GET /api/tickets/{ticketId}` | Bearer administrativo | Consulta de un boleto |
@@ -102,8 +104,11 @@ Después de ejecutar esas pruebas, el ejemplo listo para abrir está en
 | `GET /openapi.yaml` | Público | Contrato OpenAPI |
 | `GET /actuator/health` | Público | Salud del servicio y PostgreSQL |
 
-Los reintentos con el mismo `paymentId` y los mismos datos devuelven exactamente
-el boleto emitido; datos diferentes o un asiento ya emitido producen conflicto.
+El boleto se emite cuando llegan los dos mensajes (M3 y M2) con el mismo
+`reservationId`, en cualquier orden; el primero recibe `202` y queda pendiente.
+Los reintentos con los mismos datos devuelven exactamente el boleto emitido; datos
+diferentes o un asiento ya emitido producen conflicto. Detalle en
+[docs/backend-contract.md](docs/backend-contract.md).
 La base rechaza la modificación o eliminación de los boletos.
 
 El Compose local habilita la emisión sandbox. Para despliegues reales establecer

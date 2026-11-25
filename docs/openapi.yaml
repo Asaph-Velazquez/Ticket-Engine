@@ -1,9 +1,10 @@
 openapi: 3.0.3
 info:
   title: Ticket Engine — Módulo 4
-  version: 1.0.0
+  version: 2.0.0
   description: >-
-    Emisión inmutable de un boleto por pago confirmado. ES256/P-256, idempotencia
+    Emisión inmutable de un boleto al unir el pago confirmado del Módulo 3 con el
+    detalle de reserva del Módulo 2 (por reservationId). ES256/P-256, idempotencia
     por paymentId y exclusión por eventId+seatId. Solo comunicación HTTP entre
     módulos. OpenAPI también disponible en /openapi.yaml. La verificación no
     consume el boleto ni sustituye el control de acceso del Módulo 6.
@@ -14,29 +15,32 @@ tags:
   - name: Emisión
   - name: Administración
   - name: Verificación
+  - name: Wallet
 paths:
   /webhooks/payments/confirmed:
     post:
       tags: [Emisión]
       operationId: confirmPayment
-      summary: Emitir a partir de una confirmación autenticada del Módulo 3
+      summary: Recibir el pago confirmado del Módulo 3
       description: >-
         HMAC-SHA256 sobre UTF8(timestamp + '.') concatenado con los bytes JSON
-        exactos. El secreto se usa como texto UTF-8, no se decodifica como base64.
-        Timestamp epoch en segundos dentro de ±300 segundos. Autenticación antes
-        de parsear JSON. Máximo 32768 bytes incluso con Transfer-Encoding chunked.
-        Reintentar con el mismo paymentId y campos normalizados recupera el JWS
-        original, incluso tras vencer. Datos diferentes para ese pago generan409.
+        exactos, con el secreto de pagos (texto UTF-8). Timestamp epoch en segundos
+        dentro de ±300 segundos. Autenticación antes de parsear JSON. Máximo 32768
+        bytes. El pago se une con el detalle del Módulo 2 por reservationId; si el
+        detalle aún no llega responde 202 PENDING_RESERVATION y el boleto se emite
+        cuando llegue. Reenviar el mismo mensaje es idempotente.
       security:
         - paymentSignature: []
           paymentTimestamp: []
       requestBody:
-        $ref: '#/components/requestBodies/Payment'
+        $ref: '#/components/requestBodies/PaymentConfirmed'
       responses:
         '201':
-          $ref: '#/components/responses/Created'
+          $ref: '#/components/responses/IntakeIssued'
         '200':
-          $ref: '#/components/responses/Replayed'
+          $ref: '#/components/responses/IntakeReplayed'
+        '202':
+          $ref: '#/components/responses/IntakePending'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -47,21 +51,83 @@ paths:
           $ref: '#/components/responses/TooLarge'
         default:
           $ref: '#/components/responses/Error'
+  /webhooks/reservations/confirmed:
+    post:
+      tags: [Emisión]
+      operationId: confirmReservation
+      summary: Recibir el detalle de evento y asiento del Módulo 2
+      description: >-
+        Mismo esquema HMAC que pagos pero con secreto propio y encabezados
+        X-Reservation-Timestamp / X-Reservation-Signature. Si el pago aún no llega
+        responde 202 PENDING_PAYMENT. Una reserva nueva debe terminar en el futuro
+        y dentro de cinco años.
+      security:
+        - reservationSignature: []
+          reservationTimestamp: []
+      requestBody:
+        $ref: '#/components/requestBodies/ReservationDetails'
+      responses:
+        '201':
+          $ref: '#/components/responses/IntakeIssued'
+        '200':
+          $ref: '#/components/responses/IntakeReplayed'
+        '202':
+          $ref: '#/components/responses/IntakePending'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/wallet/{buyerId}/tickets:
+    get:
+      tags: [Wallet]
+      operationId: walletTickets
+      summary: Boletos de un comprador en el formato del Módulo 5
+      description: >-
+        Exige el Bearer de la Wallet (distinto del administrativo). signatureECDSA
+        es el JWS ES256 completo; se verifica con publicKeyJwk. date es la fecha de
+        inicio en America/Mexico_City (dd/MM/yyyy). status es ACTIVO o VENCIDO.
+        No incluye skSession: la clave de sesión del QR dinámico la genera el Módulo 5.
+      security:
+        - walletBearer: []
+      parameters:
+        - in: path
+          name: buyerId
+          required: true
+          schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$'}
+      responses:
+        '200':
+          description: Boletos del comprador (hasta 200)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
   /api/tickets:
     post:
       tags: [Emisión]
       operationId: emitTicket
-      summary: Alias REST del webhook, con la misma autenticación HMAC
+      summary: Alias de /webhooks/payments/confirmed, con la misma autenticación HMAC
       security:
         - paymentSignature: []
           paymentTimestamp: []
       requestBody:
-        $ref: '#/components/requestBodies/Payment'
+        $ref: '#/components/requestBodies/PaymentConfirmed'
       responses:
         '201':
-          $ref: '#/components/responses/Created'
+          $ref: '#/components/responses/IntakeIssued'
         '200':
-          $ref: '#/components/responses/Replayed'
+          $ref: '#/components/responses/IntakeReplayed'
+        '202':
+          $ref: '#/components/responses/IntakePending'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -133,14 +199,14 @@ paths:
       operationId: createDemoTicket
       summary: Emitir un boleto sandbox desde el panel interno
       description: >-
-        Exclusivo para demostraciones. Exige Bearer administrativo y la propiedad
+        Exclusivo para demostraciones. orderId y reservationId son opcionales; si se omiten se derivan del paymentId. Exige Bearer administrativo y la propiedad
         ticket.demo-enabled=true, deshabilitada por defecto en la aplicación.
         No comprueba una transacción real de pago; usa la misma lógica de firma,
         idempotencia e inmutabilidad. No habilitar en producción.
       security:
         - adminBearer: []
       requestBody:
-        $ref: '#/components/requestBodies/Payment'
+        $ref: '#/components/requestBodies/Demo'
       responses:
         '201':
           $ref: '#/components/responses/Created'
@@ -222,7 +288,7 @@ paths:
       operationId: verifyTicket
       summary: Verificar firma ES256 y claims sin consultar la base de datos
       description: >-
-        Verifica firma y perfil v1, emisor, audiencia, identificadores, estado y
+        Verifica firma y perfil v2 (o v1 para boletos previos a la integración), emisor, audiencia, identificadores, estado y
         vigencia. Siempre usar HTTP200 para tokens de formato/firma/claims inválidos.
         Requests JSON inválidos o sin token reciben400. No registra acceso de puerta.
       security: []
@@ -303,26 +369,80 @@ components:
       in: header
       name: X-Payment-Timestamp
       description: Epoch en segundos, ventana absoluta de 300 segundos.
+    reservationSignature:
+      type: apiKey
+      in: header
+      name: X-Reservation-Signature
+      description: HMAC-SHA256 hexadecimal con el secreto propio del Módulo 2.
+    reservationTimestamp:
+      type: apiKey
+      in: header
+      name: X-Reservation-Timestamp
+      description: Epoch en segundos, ventana absoluta de 300 segundos.
+    walletBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Token de servicio del Módulo 5, distinto del administrativo.
   requestBodies:
-    Payment:
+    PaymentConfirmed:
       required: true
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/PaymentConfirmation'
+            $ref: '#/components/schemas/PaymentConfirmedMessage'
           example:
-            paymentId: 5b0cc2a7-d6b9-4c3d-a39e-42a5477d5671
-            eventId: 97b11d5c-5d63-4787-abef-a35edfcabf93
-            buyerId: 80863fb0-da9c-40e9-874c-6c2be473ec61
+            event: payment.confirmed
+            sourceModule: M3_PAYMENTS
+            targetModule: M4_TICKET_ISSUANCE
+            payload:
+              paymentId: pay_01J9X8K2M4N6P8Q0R2S4T6V8W0
+              orderId: ord_01J9X8J9A1B2C3D4E5F6G7H8J9
+              reservationId: res_778899
+              buyerId: usr_102938
+              amountMinor: 125000
+              currency: MXN
+              paymentStatus: PAID
+              paidAt: '2026-11-19T19:50:00Z'
+    ReservationDetails:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReservationDetails'
+          example:
+            reservationId: res_778899
+            eventId: id-del-evento
             seatId: A-12
             eventName: Noche de concierto
             venue: Auditorio Central
             eventStartsAt: '2030-01-01T19:00:00Z'
             eventEndsAt: '2030-01-01T22:00:00Z'
-            amountMinor: 125000
-            currency: MXN
-            paymentStatus: PAID
+    Demo:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TicketIssueRequest'
   responses:
+    IntakeIssued:
+      description: Boleto emitido por este mensaje (status=ISSUED, replayed=false)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IntakeResult'
+    IntakeReplayed:
+      description: Mensaje repetido; boleto original (status=ISSUED, replayed=true)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IntakeResult'
+    IntakePending:
+      description: Mensaje guardado; falta el del otro módulo (PENDING_RESERVATION o PENDING_PAYMENT, ticket=null)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IntakeResult'
     Created:
       description: Boleto emitido, replayed=false
       content:
@@ -342,13 +462,13 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
     Unauthorized:
-      description: UNAUTHORIZED o INVALID_PAYMENT_AUTH — autenticación ausente, inválida o fuera de ventana
+      description: UNAUTHORIZED, INVALID_PAYMENT_AUTH o INVALID_RESERVATION_AUTH — autenticación ausente, inválida o fuera de ventana
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     Conflict:
-      description: PAYMENT_CONFLICT o SEAT_ALREADY_ISSUED
+      description: PAYMENT_CONFLICT, RESERVATION_CONFLICT, RESERVATION_ALREADY_PAID o SEAT_ALREADY_ISSUED
       content:
         application/json:
           schema:
@@ -366,36 +486,109 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
   schemas:
-    PaymentConfirmation:
+    ExternalId:
+      type: string
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$'
+      maxLength: 64
+    PaymentConfirmedMessage:
+      type: object
+      additionalProperties: false
+      required: [event, sourceModule, targetModule, payload]
+      properties:
+        event: {type: string, enum: [payment.confirmed]}
+        sourceModule: {type: string, enum: [M3_PAYMENTS]}
+        targetModule: {type: string, enum: [M4_TICKET_ISSUANCE]}
+        payload:
+          type: object
+          additionalProperties: false
+          required: [paymentId, orderId, reservationId, buyerId, amountMinor, currency, paymentStatus, paidAt]
+          properties:
+            paymentId: {$ref: '#/components/schemas/ExternalId'}
+            orderId: {$ref: '#/components/schemas/ExternalId'}
+            reservationId: {$ref: '#/components/schemas/ExternalId'}
+            buyerId: {$ref: '#/components/schemas/ExternalId'}
+            amountMinor: {type: integer, format: int64, minimum: 0, maximum: 9999999999999}
+            currency: {type: string, pattern: '^[A-Z]{3}$', description: Código ISO4217 válido.}
+            paymentStatus: {type: string, enum: [PAID]}
+            paidAt: {type: string, format: date-time, description: No más de 300 segundos en el futuro.}
+    ReservationDetails:
+      type: object
+      additionalProperties: false
+      required: [reservationId, eventId, seatId, eventName, venue, eventStartsAt, eventEndsAt]
+      properties:
+        reservationId: {$ref: '#/components/schemas/ExternalId'}
+        eventId: {$ref: '#/components/schemas/ExternalId'}
+        seatId: {$ref: '#/components/schemas/ExternalId'}
+        eventName: {type: string, minLength: 1, maxLength: 140}
+        venue: {type: string, minLength: 1, maxLength: 140}
+        eventStartsAt: {type: string, format: date-time}
+        eventEndsAt: {type: string, format: date-time, description: Posterior al inicio; futura y dentro de cinco años.}
+    TicketIssueRequest:
       type: object
       additionalProperties: false
       required: [paymentId, eventId, buyerId, seatId, eventName, venue, eventStartsAt, eventEndsAt, amountMinor, currency, paymentStatus]
       properties:
-        paymentId: {type: string, format: uuid, description: UUID no nulo. Un solo boleto por paymentId.}
-        eventId: {type: string, format: uuid}
-        buyerId: {type: string, format: uuid}
-        seatId: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$', maxLength: 64}
+        paymentId: {$ref: '#/components/schemas/ExternalId'}
+        eventId: {$ref: '#/components/schemas/ExternalId'}
+        buyerId: {$ref: '#/components/schemas/ExternalId'}
+        seatId: {$ref: '#/components/schemas/ExternalId'}
         eventName: {type: string, minLength: 1, maxLength: 140}
         venue: {type: string, minLength: 1, maxLength: 140}
-        eventStartsAt:
-          type: string
-          format: date-time
-          description: Instant normalizado a segundos UTC. No se admiten fechas anteriores a1970.
-        eventEndsAt:
-          type: string
-          format: date-time
-          description: Posterior al inicio; futura y dentro de cinco años para emisiones nuevas.
+        eventStartsAt: {type: string, format: date-time}
+        eventEndsAt: {type: string, format: date-time}
         amountMinor: {type: integer, format: int64, minimum: 0, maximum: 9999999999999}
-        currency: {type: string, pattern: '^[A-Z]{3}$', description: Código ISO4217 válido.}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
         paymentStatus: {type: string, enum: [PAID]}
+        orderId: {$ref: '#/components/schemas/ExternalId'}
+        reservationId: {$ref: '#/components/schemas/ExternalId'}
+    IntakeResult:
+      type: object
+      required: [status, reservationId, ticket, replayed]
+      properties:
+        status: {type: string, enum: [ISSUED, PENDING_RESERVATION, PENDING_PAYMENT]}
+        reservationId: {type: string}
+        ticket:
+          type: object
+          nullable: true
+          description: Boleto emitido (esquema Ticket); null mientras el estado es PENDING_*.
+          allOf:
+            - $ref: '#/components/schemas/Ticket'
+        replayed: {type: boolean}
+    WalletResponse:
+      type: object
+      required: [tickets, publicKeyJwk]
+      properties:
+        tickets:
+          type: array
+          items:
+            type: object
+            required: [ticketId, event, date, seat, titular, status, signatureECDSA]
+            properties:
+              ticketId: {type: string, format: uuid}
+              event: {type: string, example: Noche de concierto}
+              date: {type: string, example: 01/01/2030, description: dd/MM/yyyy en America/Mexico_City.}
+              seat: {type: string, example: A-12}
+              titular: {type: string, example: usr_102938, description: buyerId del Módulo 3.}
+              status: {type: string, enum: [ACTIVO, VENCIDO]}
+              signatureECDSA: {type: string, description: JWS compacto ES256 completo.}
+        publicKeyJwk:
+          type: object
+          required: [kty, crv, x, y]
+          properties:
+            kty: {type: string, enum: [EC]}
+            crv: {type: string, enum: [P-256]}
+            x: {type: string}
+            y: {type: string}
     Ticket:
       type: object
       required: [ticketId, paymentId, eventId, buyerId, seatId, eventName, venue, eventStartsAt, eventEndsAt, issuedAt, expiresAt, status, token, payloadHash, keyId, payloadJson]
       properties:
         ticketId: {type: string, format: uuid}
-        paymentId: {type: string, format: uuid}
-        eventId: {type: string, format: uuid}
-        buyerId: {type: string, format: uuid}
+        paymentId: {type: string}
+        eventId: {type: string}
+        buyerId: {type: string}
+        orderId: {type: string, nullable: true, description: Nulo solo en boletos previos a la integración.}
+        reservationId: {type: string, nullable: true, description: Nulo solo en boletos previos a la integración.}
         seatId: {type: string}
         eventName: {type: string}
         venue: {type: string}
