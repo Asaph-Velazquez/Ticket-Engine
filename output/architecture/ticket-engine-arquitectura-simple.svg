@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <rect width="24" height="24" fill="#fff"/>
+      <path d="M24 0H0V24" fill="none" stroke="#e5e7eb"/>
+      <path d="M12 0V24M0 12H24" fill="none" stroke="#f3f4f6"/>
+    </pattern>
+    <filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#64748b" flood-opacity=".2"/></filter>
+    <marker id="aBlue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#3677c8"/></marker>
+    <marker id="aGreen" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#4b8b44"/></marker>
+    <marker id="aPink" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#d44d8c"/></marker>
+    <marker id="aPurple" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#7955a6"/></marker>
+    <marker id="aGray" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#777"/></marker>
+    <style>
+      .title{font:700 24px Arial;fill:#1f2937}.sub{font:400 13px Arial;fill:#475569}.module{font:700 15px Arial;fill:#1f2937}.boxTitle{font:700 14px Arial;fill:#1f2937}.boxSub{font:400 12px Arial;fill:#475569}.label{font:400 11px Arial;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:4px}.note{font:400 12px Arial;fill:#64748b}
+    </style>
+  </defs>
+  <rect width="1400" height="820" fill="url(#grid)"/>
+  <text x="45" y="45" class="title">Ticket Engine · Arquitectura simplificada</text>
+  <text x="45" y="70" class="sub">Emisión y verificación de boletos con base de datos compartida</text>
+
+  <!-- Providers -->
+  <g filter="url(#shadow)"><rect x="345" y="100" width="205" height="62" rx="9" fill="#fff1c7" stroke="#d6a72c" stroke-width="1.5"/><text x="447" y="126" text-anchor="middle" class="module">Módulo 2 · Cartelera</text><text x="447" y="146" text-anchor="middle" class="sub">eventos y asientos</text></g>
+  <g filter="url(#shadow)"><rect x="595" y="100" width="205" height="62" rx="9" fill="#dff0dc" stroke="#72ad6b" stroke-width="1.5"/><text x="697" y="126" text-anchor="middle" class="module">Módulo 3 · Pagos</text><text x="697" y="146" text-anchor="middle" class="sub">confirmación PAID</text></g>
+  <g filter="url(#shadow)"><rect x="845" y="100" width="235" height="62" rx="9" fill="#fff1c7" stroke="#d6a72c" stroke-width="1.5"/><text x="962" y="126" text-anchor="middle" class="module">Otros proveedores</text><text x="962" y="146" text-anchor="middle" class="sub">eventos externos</text></g>
+
+  <!-- Side consumers -->
+  <g filter="url(#shadow)"><rect x="40" y="285" width="205" height="65" rx="9" fill="#f7c5dc" stroke="#d44d8c" stroke-width="1.5"/><text x="142" y="312" text-anchor="middle" class="module">Módulo 5 · Wallet</text><text x="142" y="332" text-anchor="middle" class="sub">recibe el boleto</text></g>
+  <g filter="url(#shadow)"><rect x="40" y="450" width="205" height="65" rx="9" fill="#d9c9ed" stroke="#7955a6" stroke-width="1.5"/><text x="142" y="477" text-anchor="middle" class="module">Módulo 6 · Acceso</text><text x="142" y="497" text-anchor="middle" class="sub">valida el boleto</text></g>
+  <g filter="url(#shadow)"><rect x="1155" y="285" width="205" height="65" rx="9" fill="#cfe1f7" stroke="#5785be" stroke-width="1.5"/><text x="1257" y="312" text-anchor="middle" class="module">Panel administrativo</text><text x="1257" y="332" text-anchor="middle" class="sub">consulta y demo</text></g>
+
+  <!-- M4 -->
+  <rect x="285" y="205" width="830" height="360" rx="12" fill="#fff9ef" stroke="#e5a11a" stroke-width="2.5" filter="url(#shadow)"/>
+  <text x="315" y="238" class="module" style="font-size:18px">Módulo 4 · Ticket Engine</text>
+  <text x="315" y="260" class="sub">emite, firma, guarda y verifica boletos</text>
+
+  <g filter="url(#shadow)"><rect x="325" y="295" width="330" height="85" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/><text x="490" y="328" text-anchor="middle" class="boxTitle">API de emisión</text><text x="490" y="350" text-anchor="middle" class="boxSub">recibe y valida datos</text><text x="490" y="367" text-anchor="middle" class="boxSub">REST + HMAC</text></g>
+  <g filter="url(#shadow)"><rect x="745" y="295" width="330" height="85" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/><text x="910" y="328" text-anchor="middle" class="boxTitle">Generador de boletos</text><text x="910" y="350" text-anchor="middle" class="boxSub">crea payload y JWS</text><text x="910" y="367" text-anchor="middle" class="boxSub">firma ES256</text></g>
+  <g filter="url(#shadow)"><rect x="325" y="420" width="330" height="85" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/><text x="490" y="453" text-anchor="middle" class="boxTitle">Persistencia</text><text x="490" y="475" text-anchor="middle" class="boxSub">guarda boletos y hashes</text><text x="490" y="492" text-anchor="middle" class="boxSub">idempotencia</text></g>
+  <g filter="url(#shadow)"><rect x="745" y="420" width="330" height="85" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/><text x="910" y="453" text-anchor="middle" class="boxTitle">Verificación</text><text x="910" y="475" text-anchor="middle" class="boxSub">firma, claims y vigencia</text><text x="910" y="492" text-anchor="middle" class="boxSub">sin consultar la base</text></g>
+
+  <!-- DB -->
+  <g filter="url(#shadow)"><rect x="455" y="650" width="535" height="92" rx="10" fill="#eeeeee" stroke="#999" stroke-width="1.5"/><text x="722" y="680" text-anchor="middle" class="module">PostgreSQL compartido</text><text x="722" y="702" text-anchor="middle" class="sub">esquemas lógicos por módulo</text><text x="722" y="721" text-anchor="middle" class="sub">permisos restringidos · m4_tickets</text></g>
+
+  <!-- arrows -->
+  <path d="M447 162V205" stroke="#4b8b44" stroke-width="2" fill="none" marker-end="url(#aGreen)"/><text x="458" y="190" class="label">evento</text>
+  <path d="M697 162V205" stroke="#4b8b44" stroke-width="2" fill="none" marker-end="url(#aGreen)"/><text x="710" y="190" class="label">PAID</text>
+  <path d="M962 162V205" stroke="#4b8b44" stroke-width="2" fill="none" marker-end="url(#aGreen)"/><text x="975" y="190" class="label">evento</text>
+  <path d="M655 337H745" stroke="#777" stroke-width="2" fill="none" marker-end="url(#aGray)"/><text x="675" y="325" class="label">datos válidos</text>
+  <path d="M490 380V420" stroke="#777" stroke-width="2" fill="none" marker-end="url(#aGray)"/><text x="505" y="408" class="label">guardar</text>
+  <path d="M910 380V420" stroke="#777" stroke-width="2" fill="none" marker-end="url(#aGray)"/><text x="923" y="408" class="label">verificar</text>
+  <path d="M655 462H745" stroke="#777" stroke-width="2" fill="none" marker-end="url(#aGray)"/><text x="680" y="450" class="label">JWS</text>
+  <path d="M490 505V650" stroke="#777" stroke-width="2" fill="none" marker-end="url(#aGray)"/><text x="505" y="585" class="label">INSERT / SELECT</text>
+  <path d="M245 317H325" stroke="#d44d8c" stroke-width="2" fill="none" marker-end="url(#aPink)"/><text x="256" y="305" class="label">boleto</text>
+  <path d="M245 482H745" stroke="#7955a6" stroke-width="2" fill="none" marker-end="url(#aPurple)"/><text x="350" y="470" class="label">token + llave pública</text>
+  <path d="M1155 317H1075" stroke="#3677c8" stroke-width="2" fill="none" marker-end="url(#aBlue)"/><text x="1080" y="305" class="label">admin</text>
+
+  <text x="40" y="785" class="note">Base compartida: separar por esquemas, permisos y ownership de tablas para limitar el acoplamiento.</text>
+</svg>

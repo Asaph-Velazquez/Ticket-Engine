@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="900" viewBox="0 0 1500 900">
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <rect width="24" height="24" fill="#ffffff"/>
+      <path d="M24 0H0V24" fill="none" stroke="#e5e7eb" stroke-width="1"/>
+      <path d="M12 0V24M0 12H24" fill="none" stroke="#f3f4f6" stroke-width="1"/>
+    </pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#64748b" flood-opacity="0.20"/>
+    </filter>
+    <marker id="greenArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#4b8b44"/></marker>
+    <marker id="blueArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#3677c8"/></marker>
+    <marker id="purpleArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#7955a6"/></marker>
+    <marker id="pinkArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#d44d8c"/></marker>
+    <marker id="grayArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#7a7a7a"/></marker>
+    <style>
+      .moduleTitle { font: 700 16px Arial, sans-serif; fill: #1f2937; }
+      .moduleSub { font: 400 12px Arial, sans-serif; fill: #334155; }
+      .groupTitle { font: 700 18px Arial, sans-serif; fill: #1f2937; }
+      .serviceTitle { font: 700 14px Arial, sans-serif; fill: #1f2937; }
+      .serviceSub { font: 400 11px Arial, sans-serif; fill: #475569; }
+      .edgeLabel { font: 400 11px Arial, sans-serif; fill: #334155; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; }
+      .edgeLabelGreen { font: 400 11px Arial, sans-serif; fill: #3f7a37; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; }
+      .edgeLabelBlue { font: 400 11px Arial, sans-serif; fill: #2e66b0; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; }
+      .edgeLabelPurple { font: 400 11px Arial, sans-serif; fill: #65448f; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; }
+      .edgeLabelPink { font: 400 11px Arial, sans-serif; fill: #b63d76; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; }
+      .note { font: 400 11px Arial, sans-serif; fill: #64748b; }
+    </style>
+  </defs>
+
+  <rect width="1500" height="900" fill="url(#grid)"/>
+
+  <!-- External modules -->
+  <g filter="url(#shadow)">
+    <rect x="330" y="25" width="220" height="64" rx="9" fill="#fff1c7" stroke="#d6a72c" stroke-width="1.5"/>
+    <text x="440" y="51" text-anchor="middle" class="moduleTitle">Módulo 2 · Cartelera</text>
+    <text x="440" y="70" text-anchor="middle" class="moduleSub">eventos, asientos y disponibilidad</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="590" y="25" width="220" height="64" rx="9" fill="#dff0dc" stroke="#72ad6b" stroke-width="1.5"/>
+    <text x="700" y="51" text-anchor="middle" class="moduleTitle">Módulo 3 · Pagos</text>
+    <text x="700" y="70" text-anchor="middle" class="moduleSub">confirmación PAID y paymentId</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="850" y="25" width="250" height="64" rx="9" fill="#fff1c7" stroke="#d6a72c" stroke-width="1.5"/>
+    <text x="975" y="51" text-anchor="middle" class="moduleTitle">Otros proveedores</text>
+    <text x="975" y="70" text-anchor="middle" class="moduleSub">organizadores e integraciones de eventos</text>
+  </g>
+
+  <!-- Side consumers -->
+  <g filter="url(#shadow)">
+    <rect x="42" y="225" width="205" height="70" rx="9" fill="#f7c5dc" stroke="#d44d8c" stroke-width="1.5"/>
+    <text x="144" y="252" text-anchor="middle" class="moduleTitle">Módulo 5 · Wallet</text>
+    <text x="144" y="271" text-anchor="middle" class="moduleSub">boleto + JWS + QR</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="42" y="420" width="205" height="70" rx="9" fill="#d9c9ed" stroke="#7955a6" stroke-width="1.5"/>
+    <text x="144" y="447" text-anchor="middle" class="moduleTitle">Módulo 6 · Acceso</text>
+    <text x="144" y="466" text-anchor="middle" class="moduleSub">validador + control de entrada</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1245" y="225" width="210" height="70" rx="9" fill="#cfe1f7" stroke="#5785be" stroke-width="1.5"/>
+    <text x="1350" y="252" text-anchor="middle" class="moduleTitle">Panel administrativo</text>
+    <text x="1350" y="271" text-anchor="middle" class="moduleSub">sandbox, consulta y exportación</text>
+  </g>
+
+  <!-- M4 boundary -->
+  <rect x="285" y="125" width="930" height="535" rx="12" fill="#fff9ef" stroke="#e5a11a" stroke-width="2.5" filter="url(#shadow)"/>
+  <text x="310" y="153" class="groupTitle">Módulo 4 · Ticket Engine</text>
+  <text x="310" y="172" class="moduleSub">emisión, firma, persistencia y verificación de boletos</text>
+
+  <!-- Services -->
+  <g filter="url(#shadow)">
+    <rect x="325" y="205" width="245" height="78" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/>
+    <text x="447" y="235" text-anchor="middle" class="serviceTitle">Emission API</text>
+    <text x="447" y="255" text-anchor="middle" class="serviceSub">REST + webhook · HMAC</text>
+    <text x="447" y="271" text-anchor="middle" class="serviceSub">validación de entrada</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="600" y="205" width="245" height="78" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/>
+    <text x="722" y="235" text-anchor="middle" class="serviceTitle">Ticket Service</text>
+    <text x="722" y="255" text-anchor="middle" class="serviceSub">payload canónico</text>
+    <text x="722" y="271" text-anchor="middle" class="serviceSub">idempotencia y conflictos</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="875" y="205" width="245" height="78" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/>
+    <text x="997" y="235" text-anchor="middle" class="serviceTitle">Crypto Service</text>
+    <text x="997" y="255" text-anchor="middle" class="serviceSub">JWS ES256 · ECDSA P-256</text>
+    <text x="997" y="271" text-anchor="middle" class="serviceSub">SHA-256 y JWK</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="325" y="325" width="245" height="78" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/>
+    <text x="447" y="355" text-anchor="middle" class="serviceTitle">Event Adapter</text>
+    <text x="447" y="375" text-anchor="middle" class="serviceSub">normaliza eventos externos</text>
+    <text x="447" y="391" text-anchor="middle" class="serviceSub">mapea evento + asiento</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="600" y="325" width="245" height="78" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/>
+    <text x="722" y="355" text-anchor="middle" class="serviceTitle">Ticket Repository</text>
+    <text x="722" y="375" text-anchor="middle" class="serviceSub">JDBC · PostgreSQL</text>
+    <text x="722" y="391" text-anchor="middle" class="serviceSub">persistencia inmutable</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="875" y="325" width="245" height="78" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/>
+    <text x="997" y="355" text-anchor="middle" class="serviceTitle">Verification API</text>
+    <text x="997" y="375" text-anchor="middle" class="serviceSub">firma + claims + vigencia</text>
+    <text x="997" y="391" text-anchor="middle" class="serviceSub">verificación sin DB</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="325" y="445" width="245" height="78" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/>
+    <text x="447" y="475" text-anchor="middle" class="serviceTitle">Audit &amp; Hash</text>
+    <text x="447" y="495" text-anchor="middle" class="serviceSub">payloadHash SHA-256</text>
+    <text x="447" y="511" text-anchor="middle" class="serviceSub">trazabilidad de emisión</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="600" y="445" width="245" height="78" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/>
+    <text x="722" y="475" text-anchor="middle" class="serviceTitle">Public Key API</text>
+    <text x="722" y="495" text-anchor="middle" class="serviceSub">/public-key</text>
+    <text x="722" y="511" text-anchor="middle" class="serviceSub">/.well-known/jwks.json</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="875" y="445" width="245" height="78" rx="8" fill="#ffe8c2" stroke="#e59a00" stroke-width="1.5"/>
+    <text x="997" y="475" text-anchor="middle" class="serviceTitle">Admin &amp; Sandbox</text>
+    <text x="997" y="495" text-anchor="middle" class="serviceSub">listado y consulta</text>
+    <text x="997" y="511" text-anchor="middle" class="serviceSub">demo controlada</text>
+  </g>
+
+  <!-- Internal arrows -->
+  <path d="M570 244H600" stroke="#d08300" stroke-width="2" fill="none" marker-end="url(#grayArrow)"/>
+  <path d="M845 244H875" stroke="#d08300" stroke-width="2" fill="none" marker-end="url(#grayArrow)"/>
+  <path d="M722 283V325" stroke="#d08300" stroke-width="2" fill="none" marker-end="url(#grayArrow)"/>
+  <path d="M722 403V445" stroke="#d08300" stroke-width="2" fill="none" marker-end="url(#grayArrow)"/>
+  <path d="M570 364H600" stroke="#d08300" stroke-width="2" fill="none" marker-end="url(#grayArrow)"/>
+  <path d="M845 364H875" stroke="#d08300" stroke-width="2" fill="none" marker-end="url(#grayArrow)"/>
+  <path d="M570 484H600" stroke="#d08300" stroke-width="2" fill="none" marker-end="url(#grayArrow)"/>
+  <path d="M845 484H875" stroke="#d08300" stroke-width="2" fill="none" marker-end="url(#grayArrow)"/>
+
+  <!-- Shared DB -->
+  <g filter="url(#shadow)">
+    <rect x="445" y="720" width="610" height="110" rx="10" fill="#eeeeee" stroke="#9a9a9a" stroke-width="1.5"/>
+    <text x="750" y="752" text-anchor="middle" class="moduleTitle">PostgreSQL compartido</text>
+    <text x="750" y="774" text-anchor="middle" class="moduleSub">una instancia · esquemas lógicos por módulo</text>
+    <text x="750" y="796" text-anchor="middle" class="moduleSub">m4_tickets · roles mínimos · migraciones controladas</text>
+  </g>
+
+  <!-- Restriction note -->
+  <g filter="url(#shadow)">
+    <rect x="1110" y="690" width="340" height="150" rx="10" fill="#fff4df" stroke="#d6a72c" stroke-width="1.5"/>
+    <text x="1132" y="720" class="moduleTitle">Restricción arquitectónica</text>
+    <text x="1132" y="745" class="moduleSub">La base compartida aumenta el acoplamiento.</text>
+    <text x="1132" y="765" class="moduleSub">Mitigaciones:</text>
+    <text x="1132" y="785" class="moduleSub">• ownership de tablas</text>
+    <text x="1132" y="803" class="moduleSub">• permisos por esquema</text>
+    <text x="1132" y="821" class="moduleSub">• contratos REST estables</text>
+  </g>
+
+  <!-- External arrows -->
+  <path d="M440 89V125" stroke="#4b8b44" stroke-width="2" fill="none" marker-end="url(#greenArrow)"/>
+  <text x="452" y="112" class="edgeLabelGreen">eventId + seatId</text>
+  <path d="M700 89V125" stroke="#4b8b44" stroke-width="2" fill="none" marker-end="url(#greenArrow)"/>
+  <text x="715" y="112" class="edgeLabelGreen">PAID + paymentId</text>
+  <path d="M975 89V125" stroke="#4b8b44" stroke-width="2" fill="none" marker-end="url(#greenArrow)"/>
+  <text x="990" y="112" class="edgeLabelGreen">event payload</text>
+
+  <path d="M247 260H325" stroke="#d44d8c" stroke-width="2" fill="none" marker-end="url(#pinkArrow)"/>
+  <text x="258" y="248" class="edgeLabelPink">boleto + JWS</text>
+  <path d="M247 455H875" stroke="#7955a6" stroke-width="2" fill="none" marker-end="url(#purpleArrow)"/>
+  <text x="410" y="442" class="edgeLabelPurple">verify(token) + llave pública</text>
+  <path d="M1245 260H1120" stroke="#3677c8" stroke-width="2" fill="none" marker-end="url(#blueArrow)"/>
+  <text x="1140" y="248" class="edgeLabelBlue">admin token</text>
+
+  <path d="M722 523V720" stroke="#7a7a7a" stroke-width="2" fill="none" marker-end="url(#grayArrow)"/>
+  <text x="738" y="620" class="edgeLabel">INSERT / SELECT</text>
+
+  <text x="50" y="865" class="note">M4 controla la emisión y la firma. La base compartida es una restricción del entorno, no una recomendación de diseño.</text>
+</svg>
