@@ -4,7 +4,7 @@ import com.ticketengine.TicketEngineApplication
 import com.ticketengine.crypto.TicketCryptoService
 import com.ticketengine.domain.TicketConflictException
 import com.ticketengine.domain.TicketValidationException
-import com.ticketengine.dto.PaymentConfirmationRequest
+import com.ticketengine.dto.TicketIssueRequest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -90,7 +90,7 @@ class TicketEmissionServiceTest @Autowired constructor(
     fun `asiento vendido no se puede emitir con otro pago`() {
         val request = request()
         service.emit(request)
-        val failure = assertFailsWith<TicketConflictException> { service.emit(request.copy(paymentId = UUID.randomUUID())) }
+        val failure = assertFailsWith<TicketConflictException> { service.emit(request.copy(paymentId = "pay_${UUID.randomUUID()}")) }
         assertEquals("SEAT_ALREADY_ISSUED", failure.code)
     }
 
@@ -116,9 +116,9 @@ class TicketEmissionServiceTest @Autowired constructor(
         val variations: List<Map<String, Any>> = listOf(
             mapOf("exp" to now.epochSecond), mapOf("nbf" to now.plusSeconds(60).epochSecond),
             mapOf("iat" to now.plusSeconds(60).epochSecond), mapOf("iss" to "otro-emisor"),
-            mapOf("aud" to "otra-wallet"), mapOf("schemaVersion" to 2L), mapOf("status" to "CANCELLED"),
-            mapOf("sub" to "1-1-1-1-1"), mapOf("jti" to UUID(0, 0).toString()),
-            mapOf("eventId" to "not-a-uuid"), mapOf("currency" to "ZZZ"), mapOf("amountMinor" to -1L),
+            mapOf("aud" to "otra-wallet"), mapOf("schemaVersion" to 3L), mapOf("schemaVersion" to 1L), mapOf("status" to "CANCELLED"),
+            mapOf("sub" to "<usuario>"), mapOf("orderId" to "../orden"), mapOf("jti" to UUID(0, 0).toString()),
+            mapOf("eventId" to "evento con espacios"), mapOf("reservationId" to 7L), mapOf("currency" to "ZZZ"), mapOf("amountMinor" to -1L),
             mapOf("seatId" to "<script>"), mapOf("venue" to "linea\ncontrol"), mapOf("exp" to "2030"),
             mapOf("eventStartsAt" to now.plusSeconds(10000).epochSecond), mapOf("extra" to "unexpected")
         )
@@ -132,11 +132,23 @@ class TicketEmissionServiceTest @Autowired constructor(
     }
 
     @Test
+    fun `boletos v1 emitidos antes de la integracion siguen verificando`() {
+        val v2 = crypto.verify(service.emit(request()).ticket.token)
+        val v1 = v2 - setOf("orderId", "reservationId") + mapOf(
+            "schemaVersion" to 1L, "sub" to UUID.randomUUID().toString(),
+            "paymentId" to UUID.randomUUID().toString(), "eventId" to UUID.randomUUID().toString()
+        )
+        assertTrue(service.verify(crypto.sign(v1).token()).valid)
+        assertFalse(service.verify(crypto.sign(v1 + ("paymentId" to "pay_no_uuid")).token()).valid)
+    }
+
+    @Test
     fun `rechaza solicitudes sin pago fechas vencidas campos control e identificadores vacios`() {
         val request = request()
         val invalid = listOf(
-            request.copy(paymentStatus = "PENDING"), request.copy(paymentId = UUID(0, 0)),
-            request.copy(buyerId = UUID(0, 0)), request.copy(eventId = UUID(0, 0)),
+            request.copy(paymentStatus = "PENDING"), request.copy(paymentId = "pay 1"), request.copy(orderId = null),
+            request.copy(reservationId = null), request.copy(reservationId = "../res"),
+            request.copy(buyerId = ""), request.copy(eventId = "-evento"),
             request.copy(eventEndsAt = now.minusSeconds(1), eventStartsAt = now.minusSeconds(100)),
             request.copy(eventEndsAt = request.eventStartsAt), request.copy(eventEndsAt = now.plusSeconds(6L * 366 * 86400)),
             request.copy(eventName = "texto\u0000control"), request.copy(venue = "\ncontrol"),
@@ -153,9 +165,11 @@ class TicketEmissionServiceTest @Autowired constructor(
         assertEquals(1, service.list(1, 0).limit)
     }
 
-    private fun request() = PaymentConfirmationRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-        "A-${UUID.randomUUID()}", "Concierto de integración", "Auditorio", now.plusSeconds(3600), now.plusSeconds(7200),
-        125000L, "MXN", "PAID")
+    private fun request(): TicketIssueRequest {
+        val id = UUID.randomUUID().toString().replace("-", "")
+        return TicketIssueRequest("pay_$id", "evt_$id", "usr_$id", "A-$id", "Concierto de integración", "Auditorio",
+            now.plusSeconds(3600), now.plusSeconds(7200), 125000L, "MXN", "PAID", "ord_$id", "res_$id")
+    }
 
     class MutableTestClock : Clock() {
         private val value = AtomicReference(Instant.parse("2030-01-01T00:00:00Z"))

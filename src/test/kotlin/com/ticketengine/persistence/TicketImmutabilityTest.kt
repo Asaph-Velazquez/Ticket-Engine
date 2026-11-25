@@ -2,7 +2,7 @@ package com.ticketengine.persistence
 
 import com.ticketengine.TicketEngineApplication
 import com.ticketengine.application.TicketEmissionService
-import com.ticketengine.dto.PaymentConfirmationRequest
+import com.ticketengine.dto.TicketIssueRequest
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -45,8 +45,9 @@ class TicketImmutabilityTest @Autowired constructor(
     @Test
     fun `triggers tambien impiden modificar y truncar usando propietario en base de pruebas`() {
         val now = Instant.now().truncatedTo(ChronoUnit.SECONDS)
-        val ticket = service.emit(PaymentConfirmationRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-            "A-1", "Prueba de inmutabilidad", "Auditorio", now.plusSeconds(3600), now.plusSeconds(7200), 100L, "MXN", "PAID")).ticket
+        val ticket = service.emit(TicketIssueRequest("pay_${UUID.randomUUID()}", "evt_${UUID.randomUUID()}", "usr_inmutable",
+            "A-1", "Prueba de inmutabilidad", "Auditorio", now.plusSeconds(3600), now.plusSeconds(7200), 100L, "MXN", "PAID",
+            "ord_${UUID.randomUUID()}", "res_${UUID.randomUUID()}")).ticket
         // Credentials belong only to the isolated test-db; production runtime never receives this secret.
         assertTrue(databaseUrl.contains("ticket_engine_test"))
         DriverManager.getConnection(databaseUrl, "ticket_engine", bootstrapPassword).use { owner ->

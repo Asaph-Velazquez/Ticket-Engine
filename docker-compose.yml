@@ -69,6 +69,10 @@ services:
         target: ticket.admin-token
       - source: payment_hmac_secret
         target: ticket.webhook-secret
+      - source: reservation_hmac_secret
+        target: ticket.reservation-webhook-secret
+      - source: wallet_token
+        target: ticket.wallet-token
     volumes:
       - signing_keys:/run/keys:ro
     ports:
@@ -204,6 +208,10 @@ services:
         target: ticket.admin-token
       - source: payment_hmac_secret
         target: ticket.webhook-secret
+      - source: reservation_hmac_secret
+        target: ticket.reservation-webhook-secret
+      - source: wallet_token
+        target: ticket.wallet-token
       - source: postgres_password
         target: test.bootstrap.password
     volumes:
@@ -223,6 +231,10 @@ secrets:
     file: ./.secrets/admin-token
   payment_hmac_secret:
     file: ./.secrets/payment-hmac-secret
+  reservation_hmac_secret:
+    file: ./.secrets/reservation-hmac-secret
+  wallet_token:
+    file: ./.secrets/wallet-token
 
 volumes:
   postgres_data:

@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 mkdir -p /secrets /keys /test-keys
-for name in postgres-password application-password admin-token payment-hmac-secret; do
+for name in postgres-password application-password admin-token payment-hmac-secret reservation-hmac-secret wallet-token; do
     path="/secrets/$name"
     if [ ! -e "$path" ]; then
         temporary="$(mktemp /secrets/.secret.XXXXXX)"

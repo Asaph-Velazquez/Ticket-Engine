@@ -4,9 +4,10 @@ import com.ticketengine.crypto.TicketCryptoService
 import com.ticketengine.domain.TicketConflictException
 import com.ticketengine.domain.TicketNotFoundException
 import com.ticketengine.domain.TicketValidationException
+import com.ticketengine.dto.EXTERNAL_ID
 import com.ticketengine.dto.EmissionResult
-import com.ticketengine.dto.PaymentConfirmationRequest
 import com.ticketengine.dto.SystemResponse
+import com.ticketengine.dto.TicketIssueRequest
 import com.ticketengine.dto.TicketPage
 import com.ticketengine.dto.TicketResponse
 import com.ticketengine.dto.VerificationResponse
@@ -36,7 +37,7 @@ class TicketEmissionService(
     @Value("\${ticket.demo-enabled:false}") private val demoEnabled: Boolean
 ) {
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    fun emit(rawRequest: PaymentConfirmationRequest): EmissionResult {
+    fun emit(rawRequest: TicketIssueRequest): EmissionResult {
         val request = normalizeAndValidate(rawRequest)
         val requestHash = crypto.sha256Hex(crypto.canonicalJson(requestFields(request)).toByteArray(StandardCharsets.UTF_8))
         repository.byPaymentId(request.paymentId)?.let { return replay(it, requestHash) }
@@ -46,22 +47,25 @@ class TicketEmissionService(
         }
         val ticketId = UUID.randomUUID()
         val claims: Map<String, Any> = mapOf(
-            "iss" to issuer, "aud" to audience, "sub" to request.buyerId.toString(), "jti" to ticketId.toString(),
+            "iss" to issuer, "aud" to audience, "sub" to request.buyerId, "jti" to ticketId.toString(),
             "iat" to now.epochSecond, "nbf" to now.epochSecond, "exp" to request.eventEndsAt.epochSecond,
-            "schemaVersion" to 1L, "status" to "ISSUED", "paymentId" to request.paymentId.toString(),
-            "eventId" to request.eventId.toString(), "seatId" to request.seatId, "eventName" to request.eventName,
+            "schemaVersion" to 2L, "status" to "ISSUED", "paymentId" to request.paymentId,
+            "orderId" to request.orderId!!, "reservationId" to request.reservationId!!,
+            "eventId" to request.eventId, "seatId" to request.seatId, "eventName" to request.eventName,
             "venue" to request.venue, "eventStartsAt" to request.eventStartsAt.epochSecond,
             "amountMinor" to request.amountMinor, "currency" to request.currency
         )
         val signed = crypto.sign(claims)
         val ticket = TicketResponse(ticketId, request.paymentId, request.eventId, request.buyerId,
             request.seatId, request.eventName, request.venue, request.eventStartsAt, request.eventEndsAt,
-            now, request.eventEndsAt, "ISSUED", signed.token(), signed.payloadHash(), crypto.keyId(), signed.payloadJson())
+            now, request.eventEndsAt, "ISSUED", signed.token(), signed.payloadHash(), crypto.keyId(), signed.payloadJson(),
+            request.orderId, request.reservationId)
         try {
             if (repository.insert(ticket, requestHash, request.amountMinor, request.currency)) {
                 return EmissionResult(ticket, false)
             }
         } catch (ex: DuplicateKeyException) {
+            // (event_id, seat_id) o reservation_id ya tienen boleto con otro pago.
             throw TicketConflictException("SEAT_ALREADY_ISSUED", "El asiento ya tiene un boleto para este evento")
         }
         // PostgreSQL ON CONFLICT waits for the first transaction; READ_COMMITTED sees its committed row here.
@@ -96,14 +100,22 @@ class TicketEmissionService(
     }
 
     private fun validateClaims(claims: Map<String, Any>) {
-        val expected = setOf("iss", "aud", "sub", "jti", "iat", "nbf", "exp", "schemaVersion", "status", "paymentId",
-            "eventId", "seatId", "eventName", "venue", "eventStartsAt", "amountMinor", "currency")
-        if (claims.keys != expected || claims["iss"] != issuer || claims["aud"] != audience || claims["status"] != "ISSUED"
-            || integer(claims, "schemaVersion") != 1L) invalidClaims()
-        for (key in listOf("sub", "jti", "paymentId", "eventId")) {
+        val version = integer(claims, "schemaVersion")
+        val expected = when (version) {
+            1L -> CLAIMS_V1
+            2L -> CLAIMS_V2
+            else -> invalidClaims()
+        }
+        if (claims.keys != expected || claims["iss"] != issuer || claims["aud"] != audience || claims["status"] != "ISSUED") invalidClaims()
+        val jti = claims["jti"] as? String ?: invalidClaims()
+        if (!isCanonicalUuid(jti)) invalidClaims()
+        // v1 (boletos previos a la integración M2/M3) usaba UUID; v2 usa los identificadores de cada módulo.
+        val idKeys = if (version == 1L) listOf("sub", "paymentId", "eventId")
+            else listOf("sub", "paymentId", "eventId", "orderId", "reservationId")
+        for (key in idKeys) {
             val text = claims[key] as? String ?: invalidClaims()
-            val id = try { UUID.fromString(text) } catch (ex: IllegalArgumentException) { invalidClaims() }
-            if (id == UUID(0, 0) || id.toString() != text) invalidClaims()
+            val ok = if (version == 1L) isCanonicalUuid(text) else ID.matches(text)
+            if (!ok) invalidClaims()
         }
         val now = clock.instant().epochSecond
         val issued = integer(claims, "iat")
@@ -113,7 +125,7 @@ class TicketEmissionService(
         if (issued < 0 || starts < 0 || issued > now || notBefore != issued || expires <= now || expires <= issued
             || expires <= starts || expires - issued > 5 * 366L * 86400) invalidClaims()
         val seat = claims["seatId"] as? String ?: invalidClaims()
-        if (!SEAT.matches(seat)) invalidClaims()
+        if (!ID.matches(seat)) invalidClaims()
         for (key in listOf("eventName", "venue")) {
             val text = claims[key] as? String ?: invalidClaims()
             if (text.isBlank() || text.length > 140 || hasControl(text)) invalidClaims()
@@ -122,6 +134,11 @@ class TicketEmissionService(
         val currency = claims["currency"] as? String ?: invalidClaims()
         if (!CURRENCY.matches(currency)) invalidClaims()
         try { Currency.getInstance(currency) } catch (ex: IllegalArgumentException) { invalidClaims() }
+    }
+
+    private fun isCanonicalUuid(text: String): Boolean {
+        val id = try { UUID.fromString(text) } catch (ex: IllegalArgumentException) { return false }
+        return id != UUID(0, 0) && id.toString() == text
     }
 
     private fun integer(claims: Map<String, Any>, field: String): Long {
@@ -139,10 +156,10 @@ class TicketEmissionService(
         return EmissionResult(existing.ticket, true)
     }
 
-    private fun normalizeAndValidate(raw: PaymentConfirmationRequest): PaymentConfirmationRequest {
-        if (validator.validate(raw).isNotEmpty()) throw TicketValidationException("Solicitud de pago inválida")
-        if (raw.paymentId == UUID(0, 0) || raw.eventId == UUID(0, 0) || raw.buyerId == UUID(0, 0)
-            || hasControl(raw.eventName) || hasControl(raw.venue)) throw TicketValidationException("Identificadores o textos inválidos")
+    private fun normalizeAndValidate(raw: TicketIssueRequest): TicketIssueRequest {
+        if (validator.validate(raw).isNotEmpty()) throw TicketValidationException("Solicitud de emisión inválida")
+        if (raw.orderId == null || raw.reservationId == null) throw TicketValidationException("Se requieren orderId y reservationId")
+        if (hasControl(raw.eventName) || hasControl(raw.venue)) throw TicketValidationException("Textos inválidos")
         try { Currency.getInstance(raw.currency) } catch (ex: IllegalArgumentException) {
             throw TicketValidationException("Moneda ISO 4217 inválida")
         }
@@ -154,10 +171,10 @@ class TicketEmissionService(
         return request
     }
 
-    private fun requestFields(request: PaymentConfirmationRequest): Map<String, Any> = mapOf(
-        "paymentId" to request.paymentId.toString(), "eventId" to request.eventId.toString(),
-        "buyerId" to request.buyerId.toString(), "seatId" to request.seatId, "eventName" to request.eventName,
-        "venue" to request.venue, "eventStartsAt" to request.eventStartsAt.epochSecond,
+    private fun requestFields(request: TicketIssueRequest): Map<String, Any> = mapOf(
+        "paymentId" to request.paymentId, "orderId" to request.orderId!!, "reservationId" to request.reservationId!!,
+        "eventId" to request.eventId, "buyerId" to request.buyerId, "seatId" to request.seatId,
+        "eventName" to request.eventName, "venue" to request.venue, "eventStartsAt" to request.eventStartsAt.epochSecond,
         "eventEndsAt" to request.eventEndsAt.epochSecond, "amountMinor" to request.amountMinor,
         "currency" to request.currency, "paymentStatus" to request.paymentStatus
     )
@@ -165,7 +182,10 @@ class TicketEmissionService(
     private fun hasControl(text: String): Boolean = text.codePoints().anyMatch { Character.isISOControl(it) }
 
     companion object {
-        private val SEAT = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
+        private val ID = Regex(EXTERNAL_ID)
         private val CURRENCY = Regex("[A-Z]{3}")
+        private val CLAIMS_V1 = setOf("iss", "aud", "sub", "jti", "iat", "nbf", "exp", "schemaVersion", "status", "paymentId",
+            "eventId", "seatId", "eventName", "venue", "eventStartsAt", "amountMinor", "currency")
+        private val CLAIMS_V2 = CLAIMS_V1 + setOf("orderId", "reservationId")
     }
 }

@@ -3,7 +3,7 @@ package com.ticketengine.api;
 import com.ticketengine.application.TicketEmissionService;
 import com.ticketengine.crypto.TicketCryptoService;
 import com.ticketengine.dto.EmissionResult;
-import com.ticketengine.dto.PaymentConfirmationRequest;
+import com.ticketengine.dto.TicketIssueRequest;
 import com.ticketengine.dto.SystemResponse;
 import com.ticketengine.dto.TicketPage;
 import com.ticketengine.dto.TicketResponse;
@@ -39,9 +39,9 @@ public class TicketController {
     }
 
     @PostMapping("/api/demo/tickets")
-    public ResponseEntity<EmissionResult> demo(@Valid @RequestBody PaymentConfirmationRequest request) {
+    public ResponseEntity<EmissionResult> demo(@Valid @RequestBody TicketIssueRequest request) {
         if (!demoEnabled) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Sandbox deshabilitado");
-        EmissionResult result = service.emit(request);
+        EmissionResult result = service.emit(request.withSandboxDefaults());
         return ResponseEntity.status(result.getReplayed() ? HttpStatus.OK : HttpStatus.CREATED).body(result);
     }
 

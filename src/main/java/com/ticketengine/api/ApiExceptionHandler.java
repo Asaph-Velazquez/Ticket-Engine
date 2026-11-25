@@ -24,8 +24,8 @@ import java.util.Map;
 @RestControllerAdvice
 public class ApiExceptionHandler {
     @ExceptionHandler(PaymentAuthenticationException.class)
-    public ResponseEntity<Map<String, String>> unauthenticated() {
-        return error(HttpStatus.UNAUTHORIZED, "INVALID_PAYMENT_AUTH", "Confirmación de pago no autenticada");
+    public ResponseEntity<Map<String, String>> unauthenticated(PaymentAuthenticationException ex) {
+        return error(HttpStatus.UNAUTHORIZED, ex.getCode(), "Mensaje de integración no autenticado");
     }
 
     @ExceptionHandler(TicketConflictException.class)
